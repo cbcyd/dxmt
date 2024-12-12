@@ -131,13 +131,22 @@ public:
     ((ID3D11Query *)pAsync)->GetDesc(&desc);
     switch (desc.Query) {
     case D3D11_QUERY_EVENT:
-      IMPLEMENT_ME;
+      ctx_state.current_cmdlist->EmitEvent([event = Com((IMTLD3DEventQuery *)pAsync
+                                            )](MTLD3D11CommandList::EventContext &ctx) {
+        // granularity is command list
+        event->Issue(ctx.cmd_queue.CurrentSeqId());
+      });
       promote_flush = true;
       break;
     case D3D11_QUERY_OCCLUSION:
     case D3D11_QUERY_OCCLUSION_PREDICATE: {
-      // auto query = static_cast<IMTLD3DOcclusionQuery *>(pAsync);
-      IMPLEMENT_ME;
+      auto query = static_cast<IMTLD3DOcclusionQuery *>(pAsync);
+      if (active_occlusion_queries.erase(query) == 0)
+        return; // invalid
+      ctx_state.current_cmdlist->EmitEvent([query = Com(query), offset = vro_state.getNextReadOffset(
+                                                                )](MTLD3D11CommandList::EventContext &ctx) {
+        query->End(ctx.cmd_queue.CurrentSeqId(), ctx.visibility_result_offset + offset);
+      });
       promote_flush = true;
       break;
     }
